@@ -1,0 +1,20 @@
+[package]
+name = "devhome-relocator"
+version = "0.1.0"
+edition = "2021"
+description = "Windows GUI utility to relocate large developer cache directories from the system drive"
+license = "MIT"
+
+[dependencies]
+eframe = "0.31"
+egui = "0.31"
+walkdir = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sysinfo = "0.34"
+winreg = "0.55"
+dirs = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+rfd = "0.15"
