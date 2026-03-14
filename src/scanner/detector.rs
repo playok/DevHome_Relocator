@@ -124,6 +124,40 @@ const TOOL_DEFINITIONS: &[ToolDefinition] = &[
             var_name: String::new(),
         },
     },
+    ToolDefinition {
+        name: "pnpm Store",
+        dir_name: "pnpm-store",
+        scan_root: ScanRoot::LocalAppData,
+        method: RelocationMethod::EnvVar {
+            var_name: String::new(),
+        },
+    },
+    ToolDefinition {
+        name: "Maven Local Repo",
+        dir_name: ".m2",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
+        name: "VS Code",
+        dir_name: ".vscode",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
+        name: "Theia IDE",
+        dir_name: ".theia-ide",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
+        name: "Bun",
+        dir_name: ".bun",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::EnvVar {
+            var_name: String::new(),
+        },
+    },
 ];
 
 fn env_var_for_tool(name: &str) -> Option<String> {
@@ -137,6 +171,8 @@ fn env_var_for_tool(name: &str) -> Option<String> {
         "pip Cache" => Some("PIP_CACHE_DIR".to_string()),
         "NuGet Packages" => Some("NUGET_PACKAGES".to_string()),
         "Deno" => Some("DENO_DIR".to_string()),
+        "pnpm Store" => Some("PNPM_STORE_DIR".to_string()),
+        "Bun" => Some("BUN_INSTALL".to_string()),
         _ => None,
     }
 }
@@ -204,6 +240,7 @@ pub fn scan_targets() -> Vec<RelocationTarget> {
                         status: TargetStatus::AlreadyMoved,
                         enabled: false,
                         env_current_value,
+                        progress: 0.0,
                     });
                     continue;
                 }
@@ -220,6 +257,7 @@ pub fn scan_targets() -> Vec<RelocationTarget> {
                             status: TargetStatus::AlreadyMoved,
                             enabled: false,
                             env_current_value,
+                            progress: 0.0,
                         });
                         continue;
                     }
@@ -241,8 +279,15 @@ pub fn scan_targets() -> Vec<RelocationTarget> {
             status: TargetStatus::Detected,
             enabled: false,
             env_current_value,
+            progress: 0.0,
         });
     }
+
+    // Sort: EnvVar targets first, then Junction targets
+    targets.sort_by_key(|t| match &t.method {
+        RelocationMethod::EnvVar { .. } => 0,
+        RelocationMethod::Junction => 1,
+    });
 
     targets
 }

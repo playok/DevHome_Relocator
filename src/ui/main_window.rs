@@ -7,7 +7,8 @@ use egui::{Color32, RichText, Vec2};
 use crate::core::{RelocationMethod, RelocationTarget, TargetStatus};
 use crate::i18n::{Locale, Texts, detect_system_locale};
 use crate::mover::{MoveEvent, ProcessInfo, check_conflicting_processes, kill_processes, rollback_target};
-use crate::scanner::{SizeResult, scan_sizes_async, scan_targets};
+use crate::core::format_bytes;
+use crate::scanner::{DirSizeEntry, HomeDirSizeResult, SizeResult, scan_home_dirs, scan_sizes_async, scan_targets};
 use crate::ui::table::render_target_table;
 use crate::utils::disk_usage::{DriveInfo, get_drives};
 
@@ -34,6 +35,9 @@ pub struct MainWindow {
     process_warnings: Vec<String>,
     texts: Texts,
     conflict_dialog: Option<ConflictDialog>,
+    tool_env_vars: Vec<(String, String, String)>,
+    home_dirs: Vec<DirSizeEntry>,
+    home_dirs_rx: Option<mpsc::Receiver<HomeDirSizeResult>>,
 }
 
 impl MainWindow {
@@ -51,6 +55,8 @@ impl MainWindow {
             .unwrap_or_else(|| "D:\\DevHomes".to_string());
 
         let size_rx = start_size_scan(&targets);
+        let tool_env_vars = crate::config::collect_tool_env_vars();
+        let (home_dirs, home_dirs_rx) = scan_home_dirs();
 
         Self {
             targets,
@@ -63,6 +69,9 @@ impl MainWindow {
             process_warnings: Vec::new(),
             texts: Texts::new(locale),
             conflict_dialog: None,
+            tool_env_vars,
+            home_dirs,
+            home_dirs_rx: Some(home_dirs_rx),
         }
     }
 
@@ -70,10 +79,22 @@ impl MainWindow {
         self.targets = scan_targets();
         self.drives = get_drives();
         self.size_rx = Some(start_size_scan(&self.targets));
+        self.tool_env_vars = crate::config::collect_tool_env_vars();
+        let (home_dirs, home_dirs_rx) = scan_home_dirs();
+        self.home_dirs = home_dirs;
+        self.home_dirs_rx = Some(home_dirs_rx);
         self.log_messages.push(self.texts.log_rescanned().to_string());
     }
 
+    fn has_selected(&self) -> bool {
+        self.targets.iter().any(|t| t.enabled)
+    }
+
     fn apply_target_paths(&mut self) {
+        if !self.has_selected() {
+            self.log_messages.push(self.texts.info_no_selected().to_string());
+            return;
+        }
         let base = PathBuf::from(&self.selected_target_base);
         for target in &mut self.targets {
             if target.enabled {
@@ -92,6 +113,10 @@ impl MainWindow {
     }
 
     fn move_selected(&mut self) {
+        if !self.has_selected() {
+            self.log_messages.push(self.texts.info_no_selected().to_string());
+            return;
+        }
         self.process_warnings = check_conflicting_processes();
         if !self.process_warnings.is_empty() && !self.dry_run {
             let msg = self.texts.log_process_warning(&self.process_warnings);
@@ -137,6 +162,10 @@ impl MainWindow {
     }
 
     fn rollback_selected(&mut self) {
+        if !self.has_selected() {
+            self.log_messages.push(self.texts.info_no_selected().to_string());
+            return;
+        }
         for target in &mut self.targets {
             if !target.enabled {
                 continue;
@@ -164,6 +193,14 @@ impl MainWindow {
                 }
             }
         }
+        if let Some(ref rx) = self.home_dirs_rx {
+            while let Ok(result) = rx.try_recv() {
+                if result.index < self.home_dirs.len() {
+                    self.home_dirs[result.index].size_bytes = Some(result.size_bytes);
+                    self.home_dirs[result.index].is_scanning = false;
+                }
+            }
+        }
     }
 
     fn poll_move_results(&mut self) {
@@ -171,12 +208,12 @@ impl MainWindow {
             while let Ok(event) = rx.try_recv() {
                 match event {
                     MoveEvent::Progress { index, percent } => {
-                        self.log_messages.push(format!(
-                            "{}: {:.0}%",
-                            self.targets[index].name, percent
-                        ));
+                        if index < self.targets.len() {
+                            self.targets[index].progress = percent;
+                        }
                     }
                     MoveEvent::Completed { index } => {
+                        self.targets[index].progress = 100.0;
                         self.targets[index].status = TargetStatus::Moved;
                         let msg =
                             self.texts.log_migration_complete(&self.targets[index].name);
@@ -247,12 +284,20 @@ fn setup_korean_font(ctx: &egui::Context) {
 }
 
 fn colored_button(ui: &mut egui::Ui, label: &str, color: Color32) -> bool {
+    colored_button_with_tooltip(ui, label, color, None)
+}
+
+fn colored_button_with_tooltip(ui: &mut egui::Ui, label: &str, color: Color32, tooltip: Option<&str>) -> bool {
     let button = egui::Button::new(
         RichText::new(label).color(Color32::BLACK).strong(),
     )
     .fill(color)
     .min_size(Vec2::new(100.0, 28.0));
-    ui.add(button).clicked()
+    let response = ui.add(button);
+    if let Some(tip) = tooltip {
+        response.clone().on_hover_text(tip);
+    }
+    response.clicked()
 }
 
 fn start_size_scan(targets: &[RelocationTarget]) -> mpsc::Receiver<SizeResult> {
@@ -277,7 +322,7 @@ impl App for MainWindow {
         self.poll_size_results();
         self.poll_move_results();
 
-        if self.size_rx.is_some() || self.move_rx.is_some() {
+        if self.size_rx.is_some() || self.move_rx.is_some() || self.home_dirs_rx.is_some() {
             ctx.request_repaint();
         }
 
@@ -288,7 +333,7 @@ impl App for MainWindow {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(self.texts.language());
                     let current = self.texts.locale;
-                    for locale in [Locale::Ko, Locale::En] {
+                    for locale in [Locale::Ko, Locale::En, Locale::Ja, Locale::Zh] {
                         if ui
                             .selectable_label(current == locale, locale.label())
                             .clicked()
@@ -407,6 +452,64 @@ impl App for MainWindow {
             }
         }
 
+        // Left panel: home directory sizes
+        egui::SidePanel::left("home_dirs_panel")
+            .default_width(250.0)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.heading(self.texts.home_dirs_title());
+                ui.separator();
+
+                // Sort by size descending for display
+                let mut sorted_indices: Vec<usize> = (0..self.home_dirs.len()).collect();
+                sorted_indices.sort_by(|&a, &b| {
+                    let sa = self.home_dirs[a].size_bytes.unwrap_or(0);
+                    let sb = self.home_dirs[b].size_bytes.unwrap_or(0);
+                    sb.cmp(&sa)
+                });
+
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    egui::Grid::new("home_dirs_grid")
+                        .num_columns(2)
+                        .striped(true)
+                        .spacing([8.0, 4.0])
+                        .show(ui, |ui| {
+                            ui.strong(self.texts.home_dirs_col_name());
+                            ui.strong(self.texts.home_dirs_col_size());
+                            ui.end_row();
+
+                            for &i in &sorted_indices {
+                                let entry = &self.home_dirs[i];
+                                let size_text = if entry.is_scanning {
+                                    self.texts.scanning().to_string()
+                                } else {
+                                    match entry.size_bytes {
+                                        Some(b) => format_bytes(b),
+                                        None => "—".to_string(),
+                                    }
+                                };
+
+                                // Color by size
+                                let color = match entry.size_bytes {
+                                    Some(b) if b >= 1024 * 1024 * 1024 => Color32::LIGHT_RED,
+                                    Some(b) if b >= 100 * 1024 * 1024 => Color32::YELLOW,
+                                    Some(b) if b >= 10 * 1024 * 1024 => Color32::LIGHT_GREEN,
+                                    _ => Color32::GRAY,
+                                };
+
+                                let is_junction = crate::mover::junction::is_junction(&entry.path);
+                                if is_junction {
+                                    ui.label(RichText::new(&entry.name).strikethrough());
+                                } else {
+                                    ui.label(&entry.name);
+                                }
+                                ui.label(RichText::new(&size_text).color(color));
+                                ui.end_row();
+                            }
+                        });
+                });
+            });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(self.texts.target_base_directory());
@@ -424,6 +527,24 @@ impl App for MainWindow {
 
             ui.separator();
 
+            ui.horizontal(|ui| {
+                if colored_button_with_tooltip(ui, self.texts.btn_rescan(), COLOR_RESCAN, Some(self.texts.tooltip_rescan())) {
+                    self.rescan();
+                }
+                if colored_button_with_tooltip(ui, self.texts.btn_set_target(), COLOR_SET_TARGET, Some(self.texts.tooltip_set_target())) {
+                    self.apply_target_paths();
+                }
+                if colored_button_with_tooltip(ui, self.texts.btn_start_move(), COLOR_START_MOVE, Some(self.texts.tooltip_start_move())) {
+                    self.move_selected();
+                }
+                ui.add_space(20.0);
+                if colored_button_with_tooltip(ui, self.texts.btn_rollback(), COLOR_ROLLBACK, Some(self.texts.tooltip_rollback())) {
+                    self.rollback_selected();
+                }
+            });
+
+            ui.separator();
+
             if !self.process_warnings.is_empty() {
                 ui.colored_label(
                     Color32::YELLOW,
@@ -435,23 +556,36 @@ impl App for MainWindow {
 
             egui::ScrollArea::both().show(ui, |ui| {
                 render_target_table(ui, &mut self.targets, &self.texts);
-            });
 
-            ui.separator();
+                if !self.tool_env_vars.is_empty() {
+                    ui.add_space(12.0);
+                    egui::CollapsingHeader::new(
+                        RichText::new(self.texts.tool_env_vars_title()).strong(),
+                    )
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        egui::Grid::new("tool_env_vars_table")
+                            .num_columns(3)
+                            .striped(true)
+                            .spacing([12.0, 4.0])
+                            .show(ui, |ui| {
+                                ui.strong(self.texts.env_col_variable());
+                                ui.strong(self.texts.env_col_value());
+                                ui.strong(self.texts.env_col_scope());
+                                ui.end_row();
 
-            ui.horizontal(|ui| {
-                if colored_button(ui, self.texts.btn_rescan(), COLOR_RESCAN) {
-                    self.rescan();
-                }
-                if colored_button(ui, self.texts.btn_set_target(), COLOR_SET_TARGET) {
-                    self.apply_target_paths();
-                }
-                if colored_button(ui, self.texts.btn_start_move(), COLOR_START_MOVE) {
-                    self.move_selected();
-                }
-                ui.add_space(20.0);
-                if colored_button(ui, self.texts.btn_rollback(), COLOR_ROLLBACK) {
-                    self.rollback_selected();
+                                for (name, value, scope) in &self.tool_env_vars {
+                                    ui.label(
+                                        RichText::new(name).color(Color32::LIGHT_BLUE),
+                                    );
+                                    ui.label(value);
+                                    ui.label(
+                                        RichText::new(scope).color(Color32::GRAY),
+                                    );
+                                    ui.end_row();
+                                }
+                            });
+                    });
                 }
             });
         });

@@ -53,6 +53,9 @@ pub struct RelocationTarget {
     pub enabled: bool,
     /// Current value of the associated environment variable (if any).
     pub env_current_value: Option<String>,
+    /// Progress percentage (0.0 ~ 100.0) during move operation.
+    #[serde(skip)]
+    pub progress: f32,
 }
 
 impl RelocationTarget {

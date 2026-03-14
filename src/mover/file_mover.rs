@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::fs;
@@ -107,13 +107,26 @@ fn move_target(
         ));
     }
 
-    // Guard: if source is already a junction pointing to target, it's already moved
-    if crate::mover::junction::is_junction(&target.current_path) {
-        return Err(format!(
-            "Already relocated (junction exists): {}",
-            target.current_path.display()
-        ));
-    }
+    // If source is already a junction, re-relocate from old target to new target
+    let is_re_relocation = crate::mover::junction::is_junction(&target.current_path);
+    let actual_src = if is_re_relocation {
+        let old_target = fs::read_link(&target.current_path)
+            .map_err(|e| format!("Failed to read junction target: {}", e))?;
+        // Normalize \\?\ prefix that Windows may add
+        let old_str = old_target.to_string_lossy().to_string();
+        let cleaned = old_str.strip_prefix(r"\\?\").unwrap_or(&old_str).to_string();
+        let old_path = PathBuf::from(&cleaned);
+
+        if old_path == *target_path {
+            return Err(format!(
+                "Already relocated to same path: {}",
+                target_path.display()
+            ));
+        }
+        old_path
+    } else {
+        target.current_path.clone()
+    };
 
     // Create parent directory
     if let Some(parent) = target_path.parent() {
@@ -123,12 +136,24 @@ fn move_target(
 
     let _ = tx.send(MoveEvent::Progress { index, percent: 0.0 });
 
-    // Copy directory tree (recursive, overwrite, detailed errors)
-    if let Err(e) = copy_dir_recursive(&target.current_path, target_path) {
+    // Calculate total size for progress tracking
+    let total_bytes = crate::scanner::calculate_dir_size(&actual_src);
+    let total_bytes = if total_bytes == 0 { 1 } else { total_bytes };
+
+    // Copy directory tree with real-time progress
+    let mut copied = 0u64;
+    let tx_progress = tx.clone();
+    let progress_callback = move |bytes_copied: u64, total: u64| {
+        // Copy phase is 0% ~ 80%, reserve 20% for verify + cleanup
+        let pct = (bytes_copied as f64 / total as f64 * 80.0) as f32;
+        let _ = tx_progress.send(MoveEvent::Progress { index, percent: pct });
+    };
+
+    if let Err(e) = copy_dir_with_progress(&actual_src, target_path, total_bytes, &mut copied, &progress_callback) {
         // Detect file locking (os error 32)
         let err_msg = e.to_string();
         if e.raw_os_error() == Some(32) || err_msg.contains("os error 32") {
-            let processes = find_processes_in_dir(&target.current_path);
+            let processes = find_processes_in_dir(&actual_src);
             if !processes.is_empty() {
                 let _ = tx.send(MoveEvent::ProcessConflict {
                     index,
@@ -141,10 +166,10 @@ fn move_target(
         return Err(format!("Failed to copy files: {}", e));
     }
 
-    let _ = tx.send(MoveEvent::Progress { index, percent: 50.0 });
+    let _ = tx.send(MoveEvent::Progress { index, percent: 85.0 });
 
     // Verify sizes match
-    let src_size = crate::scanner::calculate_dir_size(&target.current_path);
+    let src_size = crate::scanner::calculate_dir_size(&actual_src);
     let dst_size = crate::scanner::calculate_dir_size(target_path);
 
     if src_size != dst_size {
@@ -154,20 +179,27 @@ fn move_target(
         ));
     }
 
-    let _ = tx.send(MoveEvent::Progress { index, percent: 75.0 });
+    let _ = tx.send(MoveEvent::Progress { index, percent: 90.0 });
 
-    // Remove original directory (size already verified, no need to keep backup)
-    fs::remove_dir_all(&target.current_path)
-        .map_err(|e| format!("Failed to remove original directory: {}", e))?;
+    if is_re_relocation {
+        // Remove old junction, then remove old target directory
+        crate::mover::junction::delete(&target.current_path)
+            .map_err(|e| format!("Failed to remove old junction: {}", e))?;
+        fs::remove_dir_all(&actual_src)
+            .map_err(|e| format!("Failed to remove old target directory: {}", e))?;
+    } else {
+        // Remove original directory (size already verified, no need to keep backup)
+        fs::remove_dir_all(&target.current_path)
+            .map_err(|e| format!("Failed to remove original directory: {}", e))?;
+    }
 
-    // Set environment variable if applicable
+    // Set environment variable or create junction
     match &target.method {
         RelocationMethod::EnvVar { var_name } => {
             crate::config::set_user_env_var(var_name, &target_path.to_string_lossy())
                 .map_err(|e| format!("Failed to set env var {}: {}", var_name, e))?;
 
             // Also update PATH if it contains references to the old directory
-            // e.g. C:\Users\user\.cargo\bin -> D:\DevHomes\.cargo\bin
             let old_dir = target.current_path.to_string_lossy().to_string();
             let new_dir = target_path.to_string_lossy().to_string();
             let _ = crate::config::update_user_path(&old_dir, &new_dir);
@@ -237,9 +269,15 @@ pub fn rollback_target(target: &RelocationTarget) -> Result<(), String> {
     Ok(())
 }
 
-/// Recursively copy `src` directory into `dst`, creating `dst` if needed.
-/// Overwrites existing files. Reports errors with full path context.
-fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
+/// Recursively copy `src` directory into `dst` with progress reporting.
+/// `on_progress` is called with (bytes_copied_so_far, total_bytes).
+fn copy_dir_with_progress(
+    src: &Path,
+    dst: &Path,
+    total_bytes: u64,
+    copied: &mut u64,
+    on_progress: &dyn Fn(u64, u64),
+) -> io::Result<()> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;
     }
@@ -255,12 +293,12 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
         })?;
 
         if file_type.is_dir() {
-            copy_dir_recursive(&src_path, &dst_path)?;
+            copy_dir_with_progress(&src_path, &dst_path, total_bytes, copied, on_progress)?;
         } else {
-            // Try copy; if it fails because the target is locked, try removing first
+            let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+
             if let Err(e) = fs::copy(&src_path, &dst_path) {
                 if dst_path.exists() {
-                    // Remove existing file and retry
                     if let Err(rm_err) = fs::remove_file(&dst_path) {
                         return Err(io::Error::new(
                             rm_err.kind(),
@@ -280,8 +318,17 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
                     ));
                 }
             }
+
+            *copied += file_size;
+            on_progress(*copied, total_bytes);
         }
     }
 
     Ok(())
+}
+
+/// Simple recursive copy without progress (used by rollback).
+fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
+    let mut copied = 0u64;
+    copy_dir_with_progress(src, dst, 1, &mut copied, &|_, _| {})
 }

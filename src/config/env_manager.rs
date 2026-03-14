@@ -43,6 +43,53 @@ fn delete_registry_value(name: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Read system (machine-level) environment variable.
+pub fn get_machine_env_var(name: &str) -> io::Result<String> {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let env = hklm.open_subkey_with_flags(
+        "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+        KEY_READ,
+    )?;
+    env.get_value(name)
+}
+
+/// Collect tool-related environment variables (user + machine) for display.
+/// Returns Vec<(var_name, value, scope)> where scope is "User" or "Machine".
+pub fn collect_tool_env_vars() -> Vec<(String, String, String)> {
+    let var_names = [
+        "JAVA_HOME",
+        "MAVEN_HOME",
+        "M2_HOME",
+        "GRADLE_HOME",
+        "GOROOT",
+        "ANDROID_HOME",
+        "ANDROID_SDK_ROOT",
+        "DOTNET_ROOT",
+        "PNPM_HOME",
+        "BUN_INSTALL",
+        "DENO_INSTALL",
+        "VOLTA_HOME",
+        "NVM_HOME",
+        "NVM_SYMLINK",
+        "CONDA_PREFIX",
+        "PIP_CACHE_DIR",
+    ];
+
+    let mut results = Vec::new();
+    for name in &var_names {
+        if let Ok(val) = get_user_env_var(name) {
+            results.push((name.to_string(), val, "User".to_string()));
+        }
+        if let Ok(val) = get_machine_env_var(name) {
+            // Skip if already added from user scope with same value
+            if !results.iter().any(|(n, v, _)| n == name && v == &val) {
+                results.push((name.to_string(), val, "Machine".to_string()));
+            }
+        }
+    }
+    results
+}
+
 /// Replace occurrences of `old_segment` with `new_segment` inside the user PATH.
 /// This is critical when a tool directory (e.g. .cargo) is moved, because
 /// the PATH may contain `<old_dir>\bin` entries that must also be updated.

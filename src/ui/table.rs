@@ -1,4 +1,4 @@
-use egui::{Color32, RichText, Ui};
+use egui::{Color32, RichText, Ui, Vec2};
 
 use crate::core::{RelocationMethod, RelocationTarget, TargetStatus};
 use crate::i18n::Texts;
@@ -31,7 +31,15 @@ pub fn render_target_table(ui: &mut Ui, targets: &mut Vec<RelocationTarget>, tex
                     ui.label("—");
                 }
 
-                ui.label(target.method.to_string());
+                let method_label = ui.label(target.method.to_string());
+                match &target.method {
+                    RelocationMethod::Junction => {
+                        method_label.on_hover_text(texts.tooltip_junction());
+                    }
+                    RelocationMethod::EnvVar { var_name } => {
+                        method_label.on_hover_text(texts.tooltip_envvar(var_name));
+                    }
+                };
 
                 // Environment variable column
                 match &target.method {
@@ -53,31 +61,39 @@ pub fn render_target_table(ui: &mut Ui, targets: &mut Vec<RelocationTarget>, tex
                     }
                 }
 
-                let status_text = match &target.status {
-                    TargetStatus::Detected => {
-                        RichText::new(texts.status_detected()).color(Color32::LIGHT_BLUE)
-                    }
-                    TargetStatus::AlreadyMoved => {
-                        RichText::new(texts.status_already_moved())
-                            .color(Color32::from_rgb(140, 220, 255))
-                    }
-                    TargetStatus::Configured => {
-                        RichText::new(texts.status_configured()).color(Color32::YELLOW)
-                    }
-                    TargetStatus::Moving => {
-                        RichText::new(texts.status_moving()).color(Color32::GOLD)
-                    }
-                    TargetStatus::Moved => {
-                        RichText::new(texts.status_moved()).color(Color32::LIGHT_GREEN)
-                    }
-                    TargetStatus::Failed(reason) => {
-                        RichText::new(texts.status_failed(reason)).color(Color32::LIGHT_RED)
-                    }
-                    TargetStatus::Rolledback => {
-                        RichText::new(texts.status_rolledback()).color(Color32::GRAY)
-                    }
-                };
-                ui.label(status_text);
+                if target.status == TargetStatus::Moving {
+                    let pct = target.progress / 100.0;
+                    ui.horizontal(|ui| {
+                        let bar = egui::ProgressBar::new(pct)
+                            .text(format!("{:.0}%", target.progress))
+                            .desired_width(120.0);
+                        ui.add_sized(Vec2::new(140.0, 18.0), bar);
+                    });
+                } else {
+                    let status_text = match &target.status {
+                        TargetStatus::Detected => {
+                            RichText::new(texts.status_detected()).color(Color32::LIGHT_BLUE)
+                        }
+                        TargetStatus::AlreadyMoved => {
+                            RichText::new(texts.status_already_moved())
+                                .color(Color32::from_rgb(140, 220, 255))
+                        }
+                        TargetStatus::Configured => {
+                            RichText::new(texts.status_configured()).color(Color32::YELLOW)
+                        }
+                        TargetStatus::Moving => unreachable!(),
+                        TargetStatus::Moved => {
+                            RichText::new(texts.status_moved()).color(Color32::LIGHT_GREEN)
+                        }
+                        TargetStatus::Failed(reason) => {
+                            RichText::new(texts.status_failed(reason)).color(Color32::LIGHT_RED)
+                        }
+                        TargetStatus::Rolledback => {
+                            RichText::new(texts.status_rolledback()).color(Color32::GRAY)
+                        }
+                    };
+                    ui.label(status_text);
+                }
 
                 ui.end_row();
             }

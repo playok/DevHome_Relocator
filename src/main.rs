@@ -17,8 +17,8 @@ fn main() -> eframe::Result {
     let options = NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("DevHome Relocator")
-            .with_inner_size([1000.0, 600.0])
-            .with_min_inner_size([800.0, 400.0]),
+            .with_inner_size([1300.0, 700.0])
+            .with_min_inner_size([1300.0, 630.0]),
         ..Default::default()
     };
 
