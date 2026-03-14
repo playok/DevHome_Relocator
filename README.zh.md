@@ -13,7 +13,7 @@ DevHome Relocator 通过将这些目录安全地迁移到其他驱动器（D:、
 ## 截图
 
 <!-- 请添加截图 -->
-![DevHome Relocator Screenshot](screenshot.png)
+![DevHome Relocator Screenshot](docs/screenshot.png)
 
 ## 工作原理
 

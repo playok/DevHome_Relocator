@@ -13,7 +13,7 @@ DevHome Relocator solves this by safely moving these directories to another driv
 ## Screenshot
 
 <!-- Add a screenshot here -->
-![DevHome Relocator Screenshot](screenshot.png)
+![DevHome Relocator Screenshot](docs/screenshot.png)
 
 ## How It Works
 
