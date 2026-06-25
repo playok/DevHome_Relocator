@@ -66,7 +66,7 @@ src/
 | pnpm Store | PNPM_STORE_DIR |
 
 ### Junction 방식
-JetBrains JDK (.jdks), Codeium/Windsurf (.codeium), Cursor (.cursor), Windsurf (.windsurf), Claude Code (.claude), Antigravity (.antigravity), Maven Local Repo (.m2), VS Code (.vscode), Theia IDE (.theia-ide)
+JetBrains JDK (.jdks), Codeium/Windsurf (.codeium), Cursor (.cursor), Windsurf (.windsurf), Claude Code (.claude), Antigravity (.antigravity), Maven Local Repo (.m2), VS Code (.vscode), Theia IDE (.theia-ide), Anaconda (anaconda3), Scoop (scoop), npm Home (.npm), Codex (.codex)
 
 ## 주요 기능
 

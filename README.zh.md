@@ -61,6 +61,10 @@ DevHome Relocator 使用两种方式迁移目录：
 | Maven Local Repo | `%USERPROFILE%\.m2` |
 | VS Code | `%USERPROFILE%\.vscode` |
 | Theia IDE | `%USERPROFILE%\.theia-ide` |
+| Anaconda | `%USERPROFILE%\anaconda3` |
+| Scoop | `%USERPROFILE%\scoop` |
+| npm Home | `%USERPROFILE%\.npm` |
+| Codex | `%USERPROFILE%\.codex` |
 
 ## 主要功能
 

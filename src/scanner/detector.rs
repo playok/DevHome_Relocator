@@ -151,6 +151,30 @@ const TOOL_DEFINITIONS: &[ToolDefinition] = &[
         method: RelocationMethod::Junction,
     },
     ToolDefinition {
+        name: "Anaconda",
+        dir_name: "anaconda3",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
+        name: "Scoop",
+        dir_name: "scoop",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
+        name: "npm Home",
+        dir_name: ".npm",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
+        name: "Codex",
+        dir_name: ".codex",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
         name: "Bun",
         dir_name: ".bun",
         scan_root: ScanRoot::UserProfile,

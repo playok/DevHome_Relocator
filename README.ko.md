@@ -61,6 +61,10 @@ DevHome Relocator는 두 가지 방식으로 디렉토리를 이동합니다:
 | Maven Local Repo | `%USERPROFILE%\.m2` |
 | VS Code | `%USERPROFILE%\.vscode` |
 | Theia IDE | `%USERPROFILE%\.theia-ide` |
+| Anaconda | `%USERPROFILE%\anaconda3` |
+| Scoop | `%USERPROFILE%\scoop` |
+| npm Home | `%USERPROFILE%\.npm` |
+| Codex | `%USERPROFILE%\.codex` |
 
 ## 주요 기능
 

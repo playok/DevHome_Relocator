@@ -73,6 +73,7 @@ pub fn collect_tool_env_vars() -> Vec<(String, String, String)> {
         "NVM_SYMLINK",
         "CONDA_PREFIX",
         "PIP_CACHE_DIR",
+        "SCOOP",
     ];
 
     let mut results = Vec::new();

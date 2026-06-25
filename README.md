@@ -61,6 +61,10 @@ Example: `C:\Users\You\.jdks` -> `D:\DevCache\.jdks` (original path becomes a ju
 | Maven Local Repo | `%USERPROFILE%\.m2` |
 | VS Code | `%USERPROFILE%\.vscode` |
 | Theia IDE | `%USERPROFILE%\.theia-ide` |
+| Anaconda | `%USERPROFILE%\anaconda3` |
+| Scoop | `%USERPROFILE%\scoop` |
+| npm Home | `%USERPROFILE%\.npm` |
+| Codex | `%USERPROFILE%\.codex` |
 
 ## Key Features
 
