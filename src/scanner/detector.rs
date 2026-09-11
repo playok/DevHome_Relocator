@@ -175,6 +175,24 @@ const TOOL_DEFINITIONS: &[ToolDefinition] = &[
         method: RelocationMethod::Junction,
     },
     ToolDefinition {
+        name: "Local",
+        dir_name: ".local",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
+        name: "Grok",
+        dir_name: ".grok",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
+        name: "Cache",
+        dir_name: ".cache",
+        scan_root: ScanRoot::UserProfile,
+        method: RelocationMethod::Junction,
+    },
+    ToolDefinition {
         name: "Bun",
         dir_name: ".bun",
         scan_root: ScanRoot::UserProfile,

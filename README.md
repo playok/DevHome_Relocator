@@ -65,6 +65,9 @@ Example: `C:\Users\You\.jdks` -> `D:\DevCache\.jdks` (original path becomes a ju
 | Scoop | `%USERPROFILE%\scoop` |
 | npm Home | `%USERPROFILE%\.npm` |
 | Codex | `%USERPROFILE%\.codex` |
+| Local | `%USERPROFILE%\.local` |
+| Grok | `%USERPROFILE%\.grok` |
+| Cache | `%USERPROFILE%\.cache` |
 
 ## Key Features
 

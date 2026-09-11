@@ -65,6 +65,9 @@ DevHome Relocator 使用两种方式迁移目录：
 | Scoop | `%USERPROFILE%\scoop` |
 | npm Home | `%USERPROFILE%\.npm` |
 | Codex | `%USERPROFILE%\.codex` |
+| Local | `%USERPROFILE%\.local` |
+| Grok | `%USERPROFILE%\.grok` |
+| Cache | `%USERPROFILE%\.cache` |
 
 ## 主要功能
 

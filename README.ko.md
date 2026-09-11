@@ -65,6 +65,9 @@ DevHome Relocator는 두 가지 방식으로 디렉토리를 이동합니다:
 | Scoop | `%USERPROFILE%\scoop` |
 | npm Home | `%USERPROFILE%\.npm` |
 | Codex | `%USERPROFILE%\.codex` |
+| Local | `%USERPROFILE%\.local` |
+| Grok | `%USERPROFILE%\.grok` |
+| Cache | `%USERPROFILE%\.cache` |
 
 ## 주요 기능
 
